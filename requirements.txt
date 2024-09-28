@@ -1,0 +1,4 @@
+fastapi[standard]==0.115.0
+APScheduler==3.10.4
+SQLAlchemy==2.0.35
+requests==2.32.3
