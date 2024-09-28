@@ -4,11 +4,12 @@ from urllib.parse import urlparse
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+
 class APIRequest(BaseModel):
     url: str = Field(examples=["http://127.0.0.1:8000"])
     method: str = "POST"
     headers: Dict[str, str] = {}
-    body: Any
+    body: Any = Field(examples=[{}])
 
     @field_validator("url")
     @classmethod
@@ -22,6 +23,7 @@ class APIRequest(BaseModel):
 class Callback(BaseModel):
     id: Optional[str] = Field(examples=[None])
     request: APIRequest
+
 
 class OneTimeJob(Callback):
     delay: Optional[int] = None
@@ -40,6 +42,7 @@ class OneTimeJob(Callback):
             return self.date
         raise Exception("Either delay or date must be provided")
 
+
 class CronJob(Callback):
     cron: str = Field(examples=["* * * * *"])
 
@@ -48,4 +51,6 @@ class CronJob(Callback):
     def validate_cron(cls, cron: str):
         if len(cron.split()) == 5:
             return cron
-        raise ValueError("Invalid cron expression. You can check https://crontab.guru/ for help")
+        raise ValueError(
+            "Invalid cron expression. You can check https://crontab.guru/ for help"
+        )

@@ -1,4 +1,3 @@
-import os
 from datetime import datetime
 
 import requests
@@ -7,14 +6,13 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from fastapi import FastAPI, HTTPException
 
+from src import database
 from src.pydantic_models import APIRequest, CronJob, OneTimeJob
 
 app = FastAPI()
 
-DATABASE_URL = os.environ.get("DATABASE_URL", "sqlite:///./db.db")
-
 scheduler = BackgroundScheduler(
-    jobstores={"default": SQLAlchemyJobStore(url=DATABASE_URL)}
+    jobstores={"default": SQLAlchemyJobStore(engine=database.engine, tablename="jobs")},
 )
 scheduler.start()
 
@@ -76,6 +74,4 @@ def remove_job(job_id: str):
         return {"message": "Job removed successfully"}
     except Exception as e:
         print(f"Error removing job {job_id}: {str(e)}")
-        raise HTTPException(
-            status_code=400, detail=f"Error removing job: {job_id}"
-        )
+        raise HTTPException(status_code=400, detail=f"Error removing job: {job_id}")
