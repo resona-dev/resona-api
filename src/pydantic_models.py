@@ -3,6 +3,8 @@ from enum import Enum
 from typing import Any, Dict, Optional, Self
 from urllib.parse import urlparse
 
+from apscheduler.job import Job
+from apscheduler.triggers.date import DateTrigger
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 
@@ -32,9 +34,47 @@ class JobStatus(Enum):
     PAUSED = "paused"
 
 
+class TriggerType(Enum):
+    ONE_TIME = "one-time"
+    CRON = "cron"
+
+
+class Trigger(BaseModel):
+    type: TriggerType
+    fields: Any = Field(examples=[{}])
+
+
+def get_next_run_time(job: Job) -> datetime | None:
+    return getattr(job, "next_run_time", None)
+
+
+def get_job_status(job: Job) -> JobStatus:
+    if hasattr(job, "next_run_time"):
+        return JobStatus.ACTIVE if job.next_run_time else JobStatus.PAUSED
+    return JobStatus.PENDING
+
+
 class ScheduledJob(Callback):
     next_run_time: datetime | None
     status: JobStatus
+    trigger: Trigger
+
+    @classmethod
+    def parse_job(cls, job: Job) -> "ScheduledJob":
+        return ScheduledJob(
+            id=job.id,
+            request=job.args[1],
+            next_run_time=get_next_run_time(job),
+            status=get_job_status(job),
+            trigger=Trigger(
+                type=(
+                    TriggerType.ONE_TIME
+                    if job.trigger is DateTrigger
+                    else TriggerType.CRON
+                ),
+                fields=job.trigger.fields,
+            ),
+        )
 
 
 class OneTimeJob(Callback):
