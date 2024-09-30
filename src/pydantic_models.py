@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta
+from enum import Enum
 from typing import Any, Dict, Optional, Self
 from urllib.parse import urlparse
 
@@ -9,7 +10,7 @@ class APIRequest(BaseModel):
     url: str = Field(examples=["http://127.0.0.1:8000"])
     method: str = "POST"
     headers: Dict[str, str] = {}
-    body: Any = Field(examples=[{}])
+    body: Any = Field(default=None, examples=[{}])
 
     @field_validator("url")
     @classmethod
@@ -21,8 +22,19 @@ class APIRequest(BaseModel):
 
 
 class Callback(BaseModel):
-    id: Optional[str] = Field(examples=[None])
+    id: Optional[str] = Field(default=None, examples=[None])
     request: APIRequest
+
+
+class JobStatus(Enum):
+    PENDING = "pending"
+    ACTIVE = "active"
+    PAUSED = "paused"
+
+
+class ScheduledJob(Callback):
+    next_run_time: datetime | None
+    status: JobStatus
 
 
 class OneTimeJob(Callback):

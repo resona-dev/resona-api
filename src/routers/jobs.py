@@ -4,8 +4,7 @@ from typing import List
 from apscheduler.job import Job
 from apscheduler.triggers.cron import CronTrigger
 from fastapi import APIRouter, HTTPException
-
-from src.pydantic_models import Callback, CronJob, OneTimeJob
+from src.pydantic_models import CronJob, JobStatus, OneTimeJob, ScheduledJob
 from src.scheduler import perform_callback, scheduler
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
@@ -48,18 +47,41 @@ def create_cron_job(cron_job: CronJob):
     }
 
 
-@router.get("/jobs/{job_id}", response_model=Callback | None)
+def get_next_run_time(job: Job) -> datetime | None:
+    return getattr(job, "next_run_time", None)
+
+
+def get_job_status(job: Job) -> JobStatus:
+    if hasattr(job, "next_run_time"):
+        return JobStatus.ACTIVE if job.next_run_time else JobStatus.PAUSED
+    return JobStatus.PENDING
+
+
+@router.get("/{job_id}", response_model=ScheduledJob | None)
 def get_job(job_id: str):
     job: Job | None = scheduler.get_job(job_id)
     if job:
-        return Callback(id=job.id, request=job.args[1])
+        return ScheduledJob(
+            id=job.id,
+            request=job.args[1],
+            next_run_time=get_next_run_time(job),
+            status=get_job_status(job),
+        )
     raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
 
 
 @router.get("/", response_model=List[ScheduledJob], operation_id="get_all_jobs")
 def get_all_jobs():
     jobs: List[Job] = scheduler.get_jobs()
-    return [Callback(id=job.id, request=job.args[1]) for job in jobs]
+    return [
+        ScheduledJob(
+            id=job.id,
+            request=job.args[1],
+            next_run_time=get_next_run_time(job),
+            status=get_job_status(job),
+        )
+        for job in jobs
+    ]
 
 
 @router.delete("/{job_id}")
