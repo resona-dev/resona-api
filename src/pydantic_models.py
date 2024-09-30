@@ -70,7 +70,7 @@ class ScheduledJob(BaseModel):
                     if job.trigger is DateTrigger
                     else TriggerType.CRON
                 ),
-                fields=job.trigger.fields,
+                fields={f.name: str(f) for f in job.trigger.fields if not f.is_default},
             ),
         )
 
