@@ -2,49 +2,27 @@ from datetime import datetime
 from typing import List
 
 from apscheduler.job import Job
-from apscheduler.triggers.cron import CronTrigger
 from fastapi import APIRouter, HTTPException
 
-from src.pydantic_models import CronJob, JobStatus, OneTimeJob, ScheduledJob
+from src.pydantic_models import JobCreate, ScheduledJob
 from src.scheduler import perform_callback, scheduler
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 
 
-@router.post("/one-time", operation_id="create_one_time_job")
-def create_one_time_job(one_time_job: OneTimeJob):
-    run_date = one_time_job.run_date()
-
+@router.post("/", operation_id="create_job")
+def create_job(job_create: JobCreate):
     job = scheduler.add_job(
         perform_callback,
-        "date",
-        run_date=run_date,
-        args=[datetime.now(), one_time_job.request],
-        id=one_time_job.id,
+        trigger=job_create.trigger.create_trigger(),
+        args=[datetime.now(), job_create.request],
+        id=job_create.id,
     )
 
     return {
-        "message": "API call scheduled successfully",
-        "run_date": run_date,
-        "id": job.id,
-    }
-
-
-@router.post("/cron")
-def create_cron_job(cron_job: CronJob):
-    cron_trigger = CronTrigger.from_crontab(cron_job.cron)
-
-    job = scheduler.add_job(
-        perform_callback,
-        trigger=cron_trigger,
-        args=[datetime.now(), cron_job.request],
-        id=cron_job.id,
-    )
-
-    return {
-        "message": "Cron job created successfully",
-        "cron expression": cron_job.cron,
-        "id": job.id,
+        "message": "Job created successfully",
+        "job_id": job.id,
+        "next_run_time": job.next_run_time,
     }
 
 

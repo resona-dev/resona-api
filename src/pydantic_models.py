@@ -4,6 +4,7 @@ from typing import Any, Dict, Optional, Self
 from urllib.parse import urlparse
 
 from apscheduler.job import Job
+from apscheduler.triggers.cron import BaseTrigger, CronTrigger
 from apscheduler.triggers.date import DateTrigger
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -21,11 +22,6 @@ class APIRequest(BaseModel):
         if result.scheme in ["http", "https"] and result.netloc:
             return url
         raise ValueError(f"Invalid URL: {url}")
-
-
-class Callback(BaseModel):
-    id: Optional[str] = Field(default=None, examples=[None])
-    request: APIRequest
 
 
 class JobStatus(Enum):
@@ -54,10 +50,12 @@ def get_job_status(job: Job) -> JobStatus:
     return JobStatus.PENDING
 
 
-class ScheduledJob(Callback):
+class ScheduledJob(BaseModel):
+    id: str
     next_run_time: datetime | None
     status: JobStatus
     trigger: Trigger
+    request: APIRequest
 
     @classmethod
     def parse_job(cls, job: Job) -> "ScheduledJob":
@@ -77,7 +75,7 @@ class ScheduledJob(Callback):
         )
 
 
-class OneTimeJob(Callback):
+class OneTimeTriggerCreate(BaseModel):
     delay: Optional[int] = None
     date: Optional[datetime] = None
 
@@ -94,8 +92,11 @@ class OneTimeJob(Callback):
             return self.date
         raise Exception("Either delay or date must be provided")
 
+    def create_trigger(self) -> BaseTrigger:
+        return DateTrigger(run_date=self.run_date())
 
-class CronJob(Callback):
+
+class CronTriggerCreate(BaseModel):
     cron: str = Field(examples=["* * * * *"])
 
     @field_validator("cron")
@@ -106,3 +107,12 @@ class CronJob(Callback):
         raise ValueError(
             "Invalid cron expression. You can check https://crontab.guru/ for help"
         )
+
+    def create_trigger(self) -> BaseTrigger:
+        return CronTrigger.from_crontab(self.cron)
+
+
+class JobCreate(BaseModel):
+    id: Optional[str] = Field(default=None, examples=[None])
+    request: APIRequest
+    trigger: OneTimeTriggerCreate | CronTriggerCreate
