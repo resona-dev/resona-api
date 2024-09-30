@@ -11,7 +11,7 @@ from src.scheduler import perform_callback, scheduler
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 
 
-@router.post("/jobs/one-time")
+@router.post("/one-time", operation_id="create_one_time_job")
 def create_one_time_job(one_time_job: OneTimeJob):
     run_date = one_time_job.run_date()
 
@@ -30,7 +30,7 @@ def create_one_time_job(one_time_job: OneTimeJob):
     }
 
 
-@router.post("/jobs/cron")
+@router.post("/cron")
 def create_cron_job(cron_job: CronJob):
     cron_trigger = CronTrigger.from_crontab(cron_job.cron)
 
@@ -56,13 +56,13 @@ def get_job(job_id: str):
     raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
 
 
-@router.get("/jobs", response_model=List[Callback])
+@router.get("/", response_model=List[ScheduledJob], operation_id="get_all_jobs")
 def get_all_jobs():
     jobs: List[Job] = scheduler.get_jobs()
     return [Callback(id=job.id, request=job.args[1]) for job in jobs]
 
 
-@router.delete("/jobs/{job_id}")
+@router.delete("/{job_id}")
 def remove_job(job_id: str):
     try:
         scheduler.remove_job(job_id)
