@@ -17,11 +17,28 @@ router = APIRouter(prefix="/jobs", tags=["jobs"])
     status_code=status.HTTP_201_CREATED,
 )
 def create_job(job_create: JobCreate):
+    if job_create.id and scheduler.get_job(job_create.id):
+        raise HTTPException(
+            status_code=409, detail=f"Job with id {job_create.id} already exists"
+        )
+
+    job_id = job_create.id or uuid4().hex
+    trigger = job_create.trigger.create_trigger()
+    job_info = ScheduledJob(
+        id=job_id,
+        name=job_create.name,
+        created_at=datetime.now(pytz.utc),
+        request=job_create.request,
+        status=JobStatus.ACTIVE,
+        trigger=parse_trigger(trigger),
+    )
+
     job = scheduler.add_job(
-        perform_callback,
-        trigger=job_create.trigger.create_trigger(),
-        args=[datetime.now(), job_create.request],
-        id=job_create.id,
+        run_job,
+        kwargs={"job_info": job_info},
+        id=job_id,
+        name=job_create.name,
+        trigger=trigger,
     )
 
     return ScheduledJob.parse_job(job)

@@ -12,10 +12,11 @@ scheduler = BackgroundScheduler(
 )
 
 
-def perform_callback(registered_at: datetime, request: APIRequest):
+def run_job(job_info: ScheduledJob):
     try:
         # TODO: Make async and retryable
         # TODO: Use logging instead of print
+        request = job_info.request
         response = requests.request(
             request.method, request.url, headers=request.headers, json=request.body
         )
