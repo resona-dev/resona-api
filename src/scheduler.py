@@ -1,18 +1,22 @@
 from datetime import datetime
 
+import pytz
 import requests
 from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
 from apscheduler.schedulers.background import BackgroundScheduler
-
-from src import database
-from src.pydantic_models import APIRequest
+from src.crud import create_completed_job
+from src.database import SessionLocal, engine
+from src.schemas import APIResponse, JobResult, JobStatus, ScheduledJob
 
 scheduler = BackgroundScheduler(
-    jobstores={"default": SQLAlchemyJobStore(engine=database.engine, tablename="jobs")},
+    jobstores={"default": SQLAlchemyJobStore(engine=engine, tablename="jobs")},
 )
 
 
 def run_job(job_info: ScheduledJob):
+    status = JobStatus.COMPLETED_REQUEST_ERROR
+    error_message = None
+    api_response = APIResponse(status_code=500)
     try:
         # TODO: Make async and retryable
         # TODO: Use logging instead of print
@@ -20,7 +24,30 @@ def run_job(job_info: ScheduledJob):
         response = requests.request(
             request.method, request.url, headers=request.headers, json=request.body
         )
-        print(response.json())
-        print(f"API called successfully, status: {response.status_code}")
+
+        api_response = APIResponse(
+            status_code=response.status_code,
+            headers=dict(response.headers),
+            body=response.json(),
+        )
+
+        if response.ok:
+            job_info.status = JobStatus.COMPLETED_SUCCESSFUL
+        else:
+            job_info.status = JobStatus.COMPLETED_RESPONSE_ERROR
     except Exception as e:
-        print(f"Error while calling API: {str(e)}")
+        error_message = str(e)
+
+    job_info.status = status
+    job_info.result = JobResult(
+        completed_at=datetime.now(pytz.utc),
+        error_message=error_message,
+        response=api_response,
+    )
+
+    try:
+        db = SessionLocal()
+        create_completed_job(db, job_info)
+        db.close()
+    except Exception as e:
+        print(f"Failed to create completed job: {str(e)}")
