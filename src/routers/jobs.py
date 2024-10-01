@@ -1,13 +1,25 @@
 from datetime import datetime
 from typing import List
+from uuid import uuid4
 
+import pytz
 from apscheduler.job import Job
-from fastapi import APIRouter, HTTPException, status
-
-from src.pydantic_models import JobCreate, ScheduledJob
-from src.scheduler import perform_callback, scheduler
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.orm import Session
+from src.crud import get_completed_jobs
+from src.database import SessionLocal
+from src.scheduler import run_job, scheduler
+from src.schemas import JobCreate, JobStatus, ScheduledJob, parse_trigger
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
+
+
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
 
 
 @router.post(
@@ -42,6 +54,15 @@ def create_job(job_create: JobCreate):
     )
 
     return ScheduledJob.parse_job(job)
+
+
+@router.get(
+    "/completed",
+    response_model=List[ScheduledJob],
+    operation_id="get_all_completed_jobs",
+)
+def get_all_completed_jobs(db: Session = Depends(get_db)):
+    return get_completed_jobs(db)
 
 
 @router.get("/{job_id}", response_model=ScheduledJob, operation_id="get_job")
