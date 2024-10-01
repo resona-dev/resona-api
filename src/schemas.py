@@ -3,10 +3,12 @@ from enum import Enum
 from typing import Any, Dict, Optional, Self
 from urllib.parse import urlparse
 
+import pytz
 from apscheduler.job import Job
 from apscheduler.triggers.cron import BaseTrigger, CronTrigger
 from apscheduler.triggers.date import DateTrigger
 from pydantic import BaseModel, Field, field_validator, model_validator
+from . import models
 
 
 class APIRequest(BaseModel):
@@ -28,6 +30,10 @@ class JobStatus(Enum):
     PENDING = "pending"
     ACTIVE = "active"
     PAUSED = "paused"
+    COMPLETED_SUCCESSFUL = "completed-successful"
+    COMPLETED_REQUEST_ERROR = "completed-request-error"
+    COMPLETED_RESPONSE_ERROR = "completed-response-error"
+    COMPLETED_WARNING = "completed-warning"
 
 
 class TriggerType(Enum):
@@ -50,45 +56,16 @@ def get_job_status(job: Job) -> JobStatus:
     return JobStatus.PENDING
 
 
-def get_job_trigger(job: Job) -> Trigger:
-    trigger = job.trigger
+def parse_trigger(trigger: BaseTrigger) -> Trigger:
     if isinstance(trigger, DateTrigger):
         return Trigger(
             type=TriggerType.ONE_TIME,
-            fields={"date": str(trigger.run_date)},
+            fields={"date": trigger.run_date.isoformat()},
         )
     return Trigger(
         type=TriggerType.CRON,
-        fields={f.name: str(f) for f in job.trigger.fields if not f.is_default},
+        fields={f.name: str(f) for f in trigger.fields if not f.is_default},
     )
-
-
-class ScheduledJob(BaseModel):
-    id: str
-    created_at: datetime
-    next_run_time: datetime | None
-    status: JobStatus
-    trigger: Trigger
-    request: APIRequest
-
-    @classmethod
-    def parse_job(cls, job: Job) -> "ScheduledJob":
-        job_create: JobCreate = job.kwargs["job_create"]
-        return ScheduledJob(
-            id=job.id,
-            created_at=job.kwargs["created_at"],
-            request=job_create.request,
-            next_run_time=get_next_run_time(job),
-            status=get_job_status(job),
-            trigger=get_job_trigger(job),
-        )
-
-
-class JobCompletionStatus(Enum):
-    SUCCESS = "success"
-    REQUEST_ERROR = "request-error"
-    RESPONSE_ERROR = "response-error"
-    WARNING = "warning"
 
 
 class APIResponse(BaseModel):
@@ -97,15 +74,39 @@ class APIResponse(BaseModel):
     body: Any = Field(default=None, examples=[{}])
 
 
-class CompletedJob(BaseModel):
+class JobResult(BaseModel):
+    completed_at: datetime
+    error_message: Optional[str] = None
+    response: APIResponse
+
+    class Config:
+        from_attributes = True
+
+class ScheduledJob(BaseModel):
     id: str
     name: Optional[str] = None
     created_at: datetime
-    completed_at: datetime
-    status: JobCompletionStatus
+    next_run_time: datetime | None = None
+    status: JobStatus
     trigger: Trigger
     request: APIRequest
-    response: APIResponse
+    result: JobResult | None = None
+
+    @classmethod
+    def parse_job(cls, job: Job) -> "ScheduledJob":
+        job_info: ScheduledJob = job.kwargs["job_info"]
+        job_info.next_run_time = get_next_run_time(job)
+        job_info.status = get_job_status(job)
+        return job_info
+
+    @classmethod
+    def parse_db_job(cls, job: models.CompletedJob) -> "ScheduledJob":
+        parsed_job = ScheduledJob.model_validate(job)
+        parsed_job.result = JobResult.model_validate(job)
+        return parsed_job
+
+    class Config:
+        from_attributes = True
 
 
 class OneTimeTriggerCreate(BaseModel):
@@ -120,7 +121,7 @@ class OneTimeTriggerCreate(BaseModel):
 
     def run_date(self):
         if self.delay:
-            return datetime.now() + timedelta(seconds=self.delay)
+            return datetime.now(pytz.utc) + timedelta(seconds=self.delay)
         if self.date:
             return self.date
         raise Exception("Either delay or date must be provided")
@@ -149,4 +150,6 @@ class JobCreate(BaseModel):
     id: Optional[str] = Field(default=None, examples=[None])
     name: Optional[str] = Field(default=None, examples=[None])
     request: APIRequest
-    trigger: OneTimeTriggerCreate | CronTriggerCreate
+    trigger: OneTimeTriggerCreate | CronTriggerCreate = Field(
+        examples=[OneTimeTriggerCreate(delay=1)]
+    )
