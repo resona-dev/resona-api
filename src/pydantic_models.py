@@ -50,8 +50,22 @@ def get_job_status(job: Job) -> JobStatus:
     return JobStatus.PENDING
 
 
+def get_job_trigger(job: Job) -> Trigger:
+    trigger = job.trigger
+    if isinstance(trigger, DateTrigger):
+        return Trigger(
+            type=TriggerType.ONE_TIME,
+            fields={"date": str(trigger.run_date)},
+        )
+    return Trigger(
+        type=TriggerType.CRON,
+        fields={f.name: str(f) for f in job.trigger.fields if not f.is_default},
+    )
+
+
 class ScheduledJob(BaseModel):
     id: str
+    created_at: datetime
     next_run_time: datetime | None
     status: JobStatus
     trigger: Trigger
@@ -59,20 +73,39 @@ class ScheduledJob(BaseModel):
 
     @classmethod
     def parse_job(cls, job: Job) -> "ScheduledJob":
+        job_create: JobCreate = job.kwargs["job_create"]
         return ScheduledJob(
             id=job.id,
-            request=job.args[1],
+            created_at=job.kwargs["created_at"],
+            request=job_create.request,
             next_run_time=get_next_run_time(job),
             status=get_job_status(job),
-            trigger=Trigger(
-                type=(
-                    TriggerType.ONE_TIME
-                    if job.trigger is DateTrigger
-                    else TriggerType.CRON
-                ),
-                fields={f.name: str(f) for f in job.trigger.fields if not f.is_default},
-            ),
+            trigger=get_job_trigger(job),
         )
+
+
+class JobCompletionStatus(Enum):
+    SUCCESS = "success"
+    REQUEST_ERROR = "request-error"
+    RESPONSE_ERROR = "response-error"
+    WARNING = "warning"
+
+
+class APIResponse(BaseModel):
+    status_code: int
+    headers: Dict[str, str] = {}
+    body: Any = Field(default=None, examples=[{}])
+
+
+class CompletedJob(BaseModel):
+    id: str
+    name: Optional[str] = None
+    created_at: datetime
+    completed_at: datetime
+    status: JobCompletionStatus
+    trigger: Trigger
+    request: APIRequest
+    response: APIResponse
 
 
 class OneTimeTriggerCreate(BaseModel):
@@ -114,5 +147,6 @@ class CronTriggerCreate(BaseModel):
 
 class JobCreate(BaseModel):
     id: Optional[str] = Field(default=None, examples=[None])
+    name: Optional[str] = Field(default=None, examples=[None])
     request: APIRequest
     trigger: OneTimeTriggerCreate | CronTriggerCreate
