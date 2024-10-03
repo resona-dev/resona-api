@@ -32,9 +32,9 @@ def run_job(job_info: ScheduledJob):
         )
 
         if response.ok:
-            job_info.status = JobStatus.COMPLETED_SUCCESSFUL
+            status = JobStatus.COMPLETED_SUCCESSFUL
         else:
-            job_info.status = JobStatus.COMPLETED_RESPONSE_ERROR
+            status = JobStatus.COMPLETED_RESPONSE_ERROR
     except Exception as e:
         error_message = str(e)
 
