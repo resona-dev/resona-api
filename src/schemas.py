@@ -14,7 +14,7 @@ from . import models
 class APIRequest(BaseModel):
     url: str = Field(examples=["http://127.0.0.1:8000"])
     method: str = "POST"
-    headers: Dict[str, str] = {}
+    headers: Optional[Dict[str, str]] = Field(default=None, examples=[{}])
     body: Any = Field(default=None, examples=[{}])
 
     @field_validator("url")
@@ -117,6 +117,8 @@ class OneTimeTriggerCreate(BaseModel):
     def check_delay_or_date_provided(self) -> Self:
         if self.delay is None and self.date is None:
             raise ValueError("Either delay or date must be provided")
+        if self.delay is not None and self.date is not None:
+            raise ValueError("Only one of delay or date can be provided")
         return self
 
     def run_date(self):
