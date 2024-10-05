@@ -43,7 +43,7 @@ class TriggerType(Enum):
 
 class Trigger(BaseModel):
     type: TriggerType
-    fields: Any = Field(examples=[{}])
+    fields: Dict[str, str] = Field(examples=[{}])
 
 
 def get_next_run_time(job: Job) -> datetime | None:
