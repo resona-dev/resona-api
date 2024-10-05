@@ -155,3 +155,10 @@ class JobCreate(BaseModel):
     trigger: OneTimeTriggerCreate | CronTriggerCreate = Field(
         examples=[OneTimeTriggerCreate(delay=1)]
     )
+
+class JobUpdate(BaseModel):
+    name: Optional[str] = Field(default=None, examples=[None])
+    request: APIRequest
+    trigger: OneTimeTriggerCreate | CronTriggerCreate = Field(
+        examples=[OneTimeTriggerCreate(delay=1)]
+    )

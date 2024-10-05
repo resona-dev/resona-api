@@ -6,10 +6,11 @@ import pytz
 from apscheduler.job import Job
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+
 from src.crud import get_completed_jobs
 from src.database import SessionLocal
 from src.scheduler import run_job, scheduler
-from src.schemas import JobCreate, JobStatus, ScheduledJob, parse_trigger
+from src.schemas import JobCreate, JobStatus, JobUpdate, ScheduledJob, parse_trigger
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 
@@ -54,6 +55,30 @@ def create_job(job_create: JobCreate):
     )
 
     return ScheduledJob.parse_job(job)
+
+
+@router.post(
+    "/{job_id}",
+    operation_id="update_job",
+    response_model=ScheduledJob,
+    status_code=status.HTTP_200_OK,
+)
+def update_job(job_id: str, job_update: JobUpdate):
+    job = scheduler.get_job(job_id)
+    if not job:
+        raise HTTPException(
+            status_code=404, detail=f"Job with id {job_id} does not exist"
+        )
+
+    job_info: ScheduledJob = job.kwargs["job_info"]
+    job_info.name = job_update.name
+    job_info.request = job_update.request
+    trigger = job_update.trigger.create_trigger()
+    job_info.trigger = parse_trigger(trigger)
+    scheduler.modify_job(job_id, name=job_update.name, kwargs={"job_info": job_info})
+    updated_job = scheduler.reschedule_job(job_id, trigger=trigger)
+
+    return ScheduledJob.parse_job(updated_job)
 
 
 @router.get(
