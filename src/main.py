@@ -1,3 +1,4 @@
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -23,7 +24,7 @@ app = FastAPI(lifespan=lifespan)
 app.include_router(jobs.router)
 
 origins = [
-    "http://localhost:3000", 
+    os.environ.get("ALLOWED_ORIGIN", "http://localhost:3000"),
 ]
 
 app.add_middleware(
